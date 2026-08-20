@@ -1,6 +1,9 @@
 const { detectStructure } = require("./structure");
+
 const { analyzeBOS } = require("./bosEngine");
+
 const { validateOBFVG } = require("./obFvgEngine");
+
 const {
   isLiquidityCorrectSide,
   isLiquidityNearOrderBlock
@@ -18,6 +21,18 @@ const {
 const {
   buildConfirmationResult
 } = require("./confirmation");
+
+const {
+  isHTFOrderBlockIntact
+} = require("./htfOrderBlock");
+
+const {
+  findIntermediateOrderBlock
+} = require("./intermediateOB");
+
+const {
+  findOrderBlockForBOS
+} = require("./orderBlock");
 
 
 function analyzeMentorSetup({
@@ -40,7 +55,7 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    1. DAILY STRUCTURE
+    1. DAILY
     ========================================
   */
 
@@ -62,7 +77,7 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    2. 4H STRUCTURE
+    2. 4H
     ========================================
   */
 
@@ -79,14 +94,16 @@ function analyzeMentorSetup({
       reason: "4H structure is unclear",
 
       daily: dailyStructure,
-      fourHour: fourHourStructure
+
+      fourHour:
+        fourHourStructure
     };
   }
 
 
   /*
     ========================================
-    3. 1H STRUCTURE
+    3. 1H
     ========================================
   */
 
@@ -100,18 +117,24 @@ function analyzeMentorSetup({
   ) {
     return {
       signal: "WAIT",
-      reason: "1H structure is unclear",
+
+      reason:
+        "1H structure is unclear",
 
       daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure
     };
   }
 
 
   /*
     ========================================
-    4. HIGHER-TIMEFRAME ALIGNMENT
+    4. ALIGNMENT
     ========================================
   */
 
@@ -130,20 +153,25 @@ function analyzeMentorSetup({
         "Daily, 4H and 1H are not aligned",
 
       daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure
     };
   }
 
 
   /*
     ========================================
-    5. 15M STRUCTURE
+    5. 15M
     ========================================
   */
 
   const fifteenMinuteStructure =
     detectStructure(fifteenMinute);
+
 
   if (
     !fifteenMinuteStructure.valid ||
@@ -156,9 +184,15 @@ function analyzeMentorSetup({
       reason:
         "15M structure is unclear",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
+      daily:
+        dailyStructure,
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure,
+
       fifteenMinute:
         fifteenMinuteStructure
     };
@@ -166,8 +200,8 @@ function analyzeMentorSetup({
 
 
   /*
-    15M must align with the higher-timeframe
-    direction for the main setup.
+    15M must agree with the
+    higher-timeframe direction.
   */
 
   if (
@@ -178,11 +212,17 @@ function analyzeMentorSetup({
       signal: "WAIT",
 
       reason:
-        "15M direction does not align with higher timeframe",
+        "15M is not aligned with higher timeframe",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
+      daily:
+        dailyStructure,
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure,
+
       fifteenMinute:
         fifteenMinuteStructure
     };
@@ -197,9 +237,12 @@ function analyzeMentorSetup({
 
   const bosAnalysis =
     analyzeBOS({
-      candles: fifteenMinute,
+      candles:
+        fifteenMinute,
+
       structure:
         fifteenMinuteStructure,
+
       direction:
         fifteenMinuteStructure.direction
     });
@@ -210,15 +253,22 @@ function analyzeMentorSetup({
       signal: "WAIT",
 
       reason:
-        "15M BOS does not have the required displacement",
+        "15M BOS does not have required displacement",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
+      daily:
+        dailyStructure,
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure,
+
       fifteenMinute:
         fifteenMinuteStructure,
 
-      bos: bosAnalysis
+      bos:
+        bosAnalysis
     };
   }
 
@@ -227,14 +277,28 @@ function analyzeMentorSetup({
     bosAnalysis.orderBlock;
 
 
+  if (!orderBlock) {
+    return {
+      signal: "WAIT",
+
+      reason:
+        "No valid 15M Order Block found",
+
+      bos:
+        bosAnalysis
+    };
+  }
+
+
   /*
     ========================================
-    7. OB + FVG
+    7. 15M OB + FVG
     ========================================
   */
 
   const obFvg =
     validateOBFVG({
+
       orderBlock,
 
       fvgs:
@@ -250,15 +314,10 @@ function analyzeMentorSetup({
       signal: "WAIT",
 
       reason:
-        "15M Order Block does not have a nearby FVG",
+        "15M OB does not have a nearby FVG",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
-      fifteenMinute:
-        fifteenMinuteStructure,
-
-      bos: bosAnalysis,
+      bos:
+        bosAnalysis,
 
       obFvg
     };
@@ -267,7 +326,7 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    8. FIND CORRECT LIQUIDITY
+    8. LIQUIDITY
     ========================================
   */
 
@@ -278,15 +337,20 @@ function analyzeMentorSetup({
         const correctSide =
           isLiquidityCorrectSide(
             liquidity.price,
+
             orderBlock,
+
             fifteenMinuteStructure.direction
           );
+
 
         const closeEnough =
           isLiquidityNearOrderBlock(
             liquidity.price,
+
             orderBlock
           );
+
 
         return (
           correctSide &&
@@ -296,20 +360,16 @@ function analyzeMentorSetup({
     );
 
 
-  if (validLiquidity.length === 0) {
+  if (
+    validLiquidity.length === 0
+  ) {
     return {
       signal: "WAIT",
 
       reason:
-        "No valid liquidity close to the 15M Order Block",
+        "No valid liquidity near the 15M OB",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
-      fifteenMinute:
-        fifteenMinuteStructure,
-
-      bos: bosAnalysis,
+      orderBlock,
 
       obFvg,
 
@@ -326,12 +386,14 @@ function analyzeMentorSetup({
 
   let sequence = null;
 
+
   for (
     const liquidity of validLiquidity
   ) {
 
     const result =
       validateLiquiditySequence({
+
         candles:
           fifteenMinute,
 
@@ -344,9 +406,12 @@ function analyzeMentorSetup({
           fifteenMinuteStructure.direction
       });
 
+
     if (result.valid) {
+
       sequence = {
         liquidity,
+
         result
       };
 
@@ -360,15 +425,9 @@ function analyzeMentorSetup({
       signal: "WAIT",
 
       reason:
-        "No valid liquidity sweep followed by OB tap",
+        "Liquidity sweep followed by OB tap not confirmed",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
-      fifteenMinute:
-        fifteenMinuteStructure,
-
-      bos: bosAnalysis,
+      orderBlock,
 
       obFvg,
 
@@ -380,7 +439,121 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    10. AGGRESSIVE ENTRY CHECK
+    10. FIND MAIN HTF ORDER BLOCK
+    ========================================
+  */
+
+  const mainHTFStructure =
+    oneHourStructure;
+
+
+  const mainHTFOrderBlock =
+    findOrderBlockForBOS(
+      oneHour,
+      mainHTFStructure.bos,
+      mainHTFStructure.direction
+    );
+
+
+  /*
+    ========================================
+    11. CHECK HTF OB INTEGRITY
+    ========================================
+  */
+
+  const higherTimeframeOBIntact =
+    isHTFOrderBlockIntact({
+
+      orderBlock:
+        mainHTFOrderBlock,
+
+      candles:
+        oneHour,
+
+      direction:
+        oneHourStructure.direction
+    });
+
+
+  /*
+    ========================================
+    12. CURRENT PRICE
+    ========================================
+  */
+
+  const latest15M =
+    fifteenMinute[
+      fifteenMinute.length - 1
+    ];
+
+
+  const currentPrice =
+    latest15M
+      ? latest15M.close
+      : null;
+
+
+  /*
+    ========================================
+    13. FIND INTERMEDIATE OB
+    ========================================
+  */
+
+  let intermediateOrderBlock = null;
+
+
+  if (
+    currentPrice !== null &&
+    mainHTFOrderBlock
+  ) {
+
+    const candidateBlocks =
+      [];
+
+
+    /*
+      Get candidate OBs from the 15M
+      structure.
+
+      The main HTF OB is excluded
+      automatically by the detector.
+    */
+
+    const candidate =
+      findOrderBlockForBOS(
+        fifteenMinute,
+        fifteenMinuteStructure.bos,
+        fifteenMinuteStructure.direction
+      );
+
+
+    if (candidate) {
+      candidateBlocks.push(
+        candidate
+      );
+    }
+
+
+    intermediateOrderBlock =
+      findIntermediateOrderBlock({
+
+        currentPrice,
+
+        mainOrderBlock:
+          mainHTFOrderBlock,
+
+        orderBlocks:
+          candidateBlocks,
+
+        direction:
+          dailyStructure.direction
+      });
+  }
+
+
+  /*
+    ========================================
+    14. AGGRESSIVE CHECK
     ========================================
   */
 
@@ -389,17 +562,20 @@ function analyzeMentorSetup({
 
       higherTimeframeAligned,
 
-      higherTimeframeOBIntact:
-        true,
+      higherTimeframeOBIntact,
 
       structureValid:
         true,
 
       impulsiveMove:
-        bosAnalysis.displacement.valid,
+        bosAnalysis
+          .displacement
+          .valid,
 
       impulsiveMoveCausedBOS:
-        bosAnalysis.displacement.valid,
+        bosAnalysis
+          .displacement
+          .valid,
 
       orderBlockValid:
         true,
@@ -408,7 +584,7 @@ function analyzeMentorSetup({
         obFvg.valid,
 
       liquidityValid:
-        true,
+        validLiquidity.length > 0,
 
       liquidityNearOB:
         true,
@@ -420,20 +596,21 @@ function analyzeMentorSetup({
         true,
 
       intermediateOrderBlock:
-        false
+        intermediateOrderBlock !== null
     });
 
 
   /*
     ========================================
-    11. DECIDE ENTRY MODE
+    15. ENTRY MODE
     ========================================
   */
 
   const entryMode =
     determineEntryMode({
 
-      setupValid: true,
+      setupValid:
+        true,
 
       aggressive:
         aggressive.valid
@@ -442,7 +619,7 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    12. AGGRESSIVE ENTRY
+    16. AGGRESSIVE
     ========================================
   */
 
@@ -452,20 +629,35 @@ function analyzeMentorSetup({
   ) {
 
     return {
-      signal: "AGGRESSIVE",
+
+      signal:
+        "AGGRESSIVE",
 
       direction:
-        fifteenMinuteStructure.direction,
+        dailyStructure.direction,
 
       entryMode,
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
+      daily:
+        dailyStructure,
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure,
+
       fifteenMinute:
         fifteenMinuteStructure,
 
-      bos: bosAnalysis,
+      mainHTFOrderBlock,
+
+      higherTimeframeOBIntact,
+
+      intermediateOrderBlock,
+
+      bos:
+        bosAnalysis,
 
       orderBlock,
 
@@ -482,30 +674,45 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    13. CONFIRMATION
+    17. CONFIRMATION REQUIRED
     ========================================
   */
 
   if (!fiveMinute) {
+
     return {
+
       signal:
         "CONFIRMATION_REQUIRED",
 
       direction:
-        fifteenMinuteStructure.direction,
+        dailyStructure.direction,
 
       entryMode,
 
       reason:
-        "15M setup is valid but aggressive entry is not allowed",
+        "Valid setup but aggressive entry is not allowed",
 
-      daily: dailyStructure,
-      fourHour: fourHourStructure,
-      oneHour: oneHourStructure,
+      daily:
+        dailyStructure,
+
+      fourHour:
+        fourHourStructure,
+
+      oneHour:
+        oneHourStructure,
+
       fifteenMinute:
         fifteenMinuteStructure,
 
-      bos: bosAnalysis,
+      mainHTFOrderBlock,
+
+      higherTimeframeOBIntact,
+
+      intermediateOrderBlock,
+
+      bos:
+        bosAnalysis,
 
       orderBlock,
 
@@ -521,7 +728,10 @@ function analyzeMentorSetup({
 
 
   /*
-    5M confirmation.
+    ========================================
+    18. 5M CONFIRMATION
+    ========================================
+
     NO displacement requirement.
   */
 
@@ -535,19 +745,25 @@ function analyzeMentorSetup({
         confirmation.internalBOS === true,
 
       confirmationOrderBlock:
-        confirmation.orderBlock || null,
+        confirmation.orderBlock ||
+        null,
 
       nearbyFVG:
         confirmation.nearbyFVG === true
     });
 
 
-  if (!confirmationResult.valid) {
+  if (
+    !confirmationResult.valid
+  ) {
+
     return {
-      signal: "WAIT",
+
+      signal:
+        "WAIT",
 
       direction:
-        fifteenMinuteStructure.direction,
+        dailyStructure.direction,
 
       reason:
         "5M confirmation failed",
@@ -560,25 +776,40 @@ function analyzeMentorSetup({
 
   /*
     ========================================
-    14. FINAL CONFIRMATION ENTRY
+    19. FINAL CONFIRMATION
     ========================================
   */
 
   return {
-    signal: "CONFIRMATION",
+
+    signal:
+      "CONFIRMATION",
 
     direction:
-      fifteenMinuteStructure.direction,
+      dailyStructure.direction,
 
     entryMode,
 
-    daily: dailyStructure,
-    fourHour: fourHourStructure,
-    oneHour: oneHourStructure,
+    daily:
+      dailyStructure,
+
+    fourHour:
+      fourHourStructure,
+
+    oneHour:
+      oneHourStructure,
+
     fifteenMinute:
       fifteenMinuteStructure,
 
-    bos: bosAnalysis,
+    mainHTFOrderBlock,
+
+    higherTimeframeOBIntact,
+
+    intermediateOrderBlock,
+
+    bos:
+      bosAnalysis,
 
     orderBlock,
 
