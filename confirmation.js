@@ -1,137 +1,75 @@
 /*
-  5M CONFIRMATION ENGINE
+  SMC MENTOR AI
+  5M CONFIRMATION ENGINE V2
 
-  IMPORTANT:
-  A 5M confirmation does NOT require
-  an impulsive/displacement move.
+  Purpose:
+  Used ONLY when aggressive 15M entry
+  is not allowed.
 
-  Valid confirmation:
-  1. Normal CHOCH
-  OR
+  Confirmation can be:
+
+  1. CHOCH
   2. Internal BOS
 
-  After the structural change, we identify
-  the Order Block that caused the change.
+  IMPORTANT:
+
+  5M confirmation does NOT require
+  an impulsive move.
+
+  The confirmation OB must:
+  - Cause the CHOCH/Internal BOS
+  - Be very close to an FVG
 */
 
-function detectCHOCH(
-  previousDirection,
-  currentDirection
-) {
-  if (
-    !previousDirection ||
-    !currentDirection
-  ) {
-    return false;
-  }
 
+function isValidConfirmationStructure({
+  choch,
+  internalBOS
+}) {
   return (
-    previousDirection !== "NEUTRAL" &&
-    previousDirection !== "UNKNOWN" &&
-    currentDirection !== previousDirection
+    choch === true ||
+    internalBOS === true
   );
 }
 
-function detectInternalBOS(
-  previousInternalLevel,
-  currentPrice,
-  direction
-) {
-  if (
-    typeof previousInternalLevel !== "number" ||
-    typeof currentPrice !== "number"
-  ) {
-    return false;
-  }
-
-  if (direction === "BULLISH") {
-    return currentPrice > previousInternalLevel;
-  }
-
-  if (direction === "BEARISH") {
-    return currentPrice < previousInternalLevel;
-  }
-
-  return false;
-}
 
 /*
-  Find the candle used as the candidate
-  Order Block for the structural change.
-
-  This is deliberately kept separate because
-  later we will make the "caused the change"
-  logic more precise.
+  Determine the type of confirmation.
 */
 
-function findConfirmationOrderBlock(
-  candles,
-  changeIndex,
-  direction
-) {
-  if (
-    !Array.isArray(candles) ||
-    changeIndex <= 0 ||
-    changeIndex >= candles.length
-  ) {
-    return null;
-  }
-
-  const candle =
-    candles[changeIndex - 1];
-
-  return {
-    index: changeIndex - 1,
-    direction,
-
-    // Entire candle including both wicks.
-    high: candle.high,
-    low: candle.low,
-
-    includesWicks: true,
-
-    size: candle.high - candle.low
-  };
-}
-
-/*
-  Validate the 5M confirmation setup.
-
-  Required:
-  - CHOCH OR Internal BOS
-  - Confirmation OB exists
-  - Confirmation OB is close to FVG
-
-  NOT required:
-  - Impulsive move
-*/
-
-function validateConfirmation({
-  choch = false,
-  internalBOS = false,
-  confirmationOrderBlock = null,
-  nearbyFVG = false
+function getConfirmationType({
+  choch,
+  internalBOS
 }) {
-  const structuralConfirmation =
-    choch || internalBOS;
+  if (choch === true) {
+    return "CHOCH";
+  }
 
-  if (!structuralConfirmation) {
+  if (internalBOS === true) {
+    return "INTERNAL_BOS";
+  }
+
+  return "NONE";
+}
+
+
+/*
+  Validate the 5M confirmation OB.
+*/
+
+function validateConfirmationOrderBlock({
+  orderBlock,
+  nearbyFVG
+}) {
+  if (!orderBlock) {
     return {
       valid: false,
       reason:
-        "No 5M CHOCH or internal BOS"
+        "No confirmation Order Block found"
     };
   }
 
-  if (!confirmationOrderBlock) {
-    return {
-      valid: false,
-      reason:
-        "No confirmation order block found"
-    };
-  }
-
-  if (!nearbyFVG) {
+  if (nearbyFVG !== true) {
     return {
       valid: false,
       reason:
@@ -141,13 +79,17 @@ function validateConfirmation({
 
   return {
     valid: true,
+
+    orderBlock,
+
     reason:
-      "5M confirmation conditions satisfied"
+      "Confirmation OB is valid and close to FVG"
   };
 }
 
+
 /*
-  Complete 5M confirmation result.
+  Build the complete confirmation result.
 */
 
 function buildConfirmationResult({
@@ -156,43 +98,65 @@ function buildConfirmationResult({
   confirmationOrderBlock = null,
   nearbyFVG = false
 }) {
-  const validation =
-    validateConfirmation({
+  const structureValid =
+    isValidConfirmationStructure({
       choch,
-      internalBOS,
-      confirmationOrderBlock,
+      internalBOS
+    });
+
+  if (!structureValid) {
+    return {
+      valid: false,
+
+      type: "NONE",
+
+      reason:
+        "No CHOCH or internal BOS confirmation"
+    };
+  }
+
+  const type =
+    getConfirmationType({
+      choch,
+      internalBOS
+    });
+
+  const orderBlock =
+    validateConfirmationOrderBlock({
+      orderBlock:
+        confirmationOrderBlock,
+
       nearbyFVG
     });
 
+  if (!orderBlock.valid) {
+    return {
+      valid: false,
+
+      type,
+
+      reason:
+        orderBlock.reason
+    };
+  }
+
   return {
-    timeframe: "5M",
+    valid: true,
 
-    confirmationType: choch
-      ? "CHOCH"
-      : internalBOS
-        ? "INTERNAL_BOS"
-        : null,
-
-    impulsiveMoveRequired: false,
+    type,
 
     orderBlock:
-      confirmationOrderBlock,
-
-    fvgProximity:
-      nearbyFVG,
-
-    valid:
-      validation.valid,
+      orderBlock.orderBlock,
 
     reason:
-      validation.reason
+      `5M ${type} confirmation is valid`
   };
 }
 
+
 module.exports = {
-  detectCHOCH,
-  detectInternalBOS,
-  findConfirmationOrderBlock,
-  validateConfirmation,
+  isValidConfirmationStructure,
+  getConfirmationType,
+  validateConfirmationOrderBlock,
   buildConfirmationResult
 };
